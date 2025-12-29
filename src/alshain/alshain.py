@@ -3,7 +3,7 @@
 import struct
 from typing import Tuple
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 BAUDRATE = 460800
 
@@ -61,6 +61,10 @@ class Protocol:
     OP_SET_LOW_CURRENT_MODE = 	0x41
 
 
+    # Sylphium
+    OP_ICTRL = 0x03
+    OP_ENABLE = 0x04
+    OP_MODULATION = 0x05
 
     # I2C related
     OP_I2C_TEMP = 0x13
@@ -1135,3 +1139,189 @@ class LedDriver( Device ):
         DEVICE_ADDRESS =   (4)
 
 
+# Sylphium eco laser driver
+class Sylphium( Device ):
+    class Parameters:
+        I_MEAS =      (0)
+        VIN =         (1)
+        I_MON_HS =    (2)
+        V_MON_LP =    (3)
+        V_MON_LM =    (4)
+        EXT_PD =      (5)
+        EXT_MOD =     (6)
+        PD_SIGNAL =   (7)
+        OUTPUT_EN =   (8)
+        POWER_OK =    (9)
+        TEMP_0 =     (10)
+        TEMP_1 =     (11)
+        TEMP_2 =     (12)
+        TEMP_3 =     (13)
+
+        INTERLOCK_OK =      (15)
+        LASER_OK =          (16)
+
+        TRIGGER_CNT =   (17)
+
+        V_SET =       (20)
+        I_LIMIT =     (21)
+        TRIG_LVL =    (22)
+        PD_THOLD =    (23)
+        TRIG_POL =    (24)
+        IRANGE =      (25)
+        PD_EN =       (26)
+        PD_GAIN =     (27)
+        PD_BIAS =     (28)
+
+        POWER_EN =    (29)
+
+
+        PD_AVG =      (30)
+        PD_RMS =      (31)
+
+        I_AVG =      (32)
+        I_RMS =      (33)
+
+        VD_AVG =      (34)
+        VD_RMS =      (35)
+
+        P_AVG =      (36)
+        P_RMS =      (37)
+
+
+        VDROP =       (38)
+        PD_CTRL =     (39)
+
+
+        LSET_GAIN =     (40)
+        LSET_OFFSET =   (41)
+        DAC_OFFSET =    (42)
+        CURRENT_GAIN =  (43)
+
+
+        IO_IN =         (50)
+        OPTO_IN =       (51)
+        IO_OUT =        (52)
+        OPTO_OUT =      (53)
+
+        INTERLOCK_STRATEGY =  (55)
+        INTERLOCK_DELAY =     (56)
+
+        SERIAL_NUMBER =       (136)
+        FIRMWARE_VER =		  (137)
+        UPTIME =			  (138)
+
+
+        MOD_PARAM0 =          (1010)
+        MOD_PARAM1 =          (1011)
+        MOD_PARAM2 =          (1012)
+        MOD_PARAM3 =          (1013)
+
+        MOD_LENGTH =          (1020)
+        MOD_STATE =           (1021)
+        MOD_REPEAT_PERIOD =   (1022)
+        MOD_SAMPLERATE =      (1023)
+        MOD_DATA_START =      (1024)
+
+    class Options:
+        IRANGE_3A =          (0)
+        IRANGE_300mA =       (1)
+
+        TRIGGER_POL_POS =   (0)
+        TRIGGER_POL_NEG =   (1)
+
+        PD_GAIN_1k =        (0)
+        PD_GAIN_10k =       (1)
+        PD_GAIN_100k =      (2)
+        PD_GAIN_1M =        (3)
+
+        PD_BIAS_0V =        (0)
+        PD_BIAS_5V =        (1)
+
+
+        ENABLE_OUTPUT =     (0)
+        ENABLE_POWER =      (1)
+        ENABLE_PD =         (2)
+        ENABLE_PD_CTRL =    (3)
+
+        INTERLOCK_NORMAL =          (0)
+        INTERLOCK_SECONDARY =       (1)
+        INTERLOCK_SECONDARY_INV =   (2)
+
+        MOD_RUN =                (0)
+        MOD_FILL =               (1) 
+        MOD_SINGLE_SHOT =        (2)
+        MOD_PERIODC =            (3)
+
+        MOD_SHAPE_PULSE =   (0)
+        MOD_SHAPE_SINE =    (1)
+
+    class NVM:
+        DEVICE_ADDRESS =   (4)
+        SERIAL_NUMBER =    (8)
+
+
+    def __init__(self, com, address):
+        super().__init__(com, address)
+        self.arb = MemoryMap( self, Sylphium.Parameters.MOD_DATA_START )
+    
+    def enable_output( self, state ) -> None:
+        self._clear_buffer()
+        
+        if state:
+            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_ENABLE, Protocol.ENABLE_OUTPUT, 1 ) )
+        else:
+            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_ENABLE, Protocol.ENABLE_OUTPUT, 0 ) )
+            
+        response = self.com.read( Protocol._MSG_LEN )
+
+
+    def enable_main_power( self, state ) -> None:
+        self._clear_buffer()
+        
+        if state:
+            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_ENABLE, Protocol.ENABLE_POWER, 1 ) )
+        else:
+            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_ENABLE, Protocol.ENABLE_POWER, 0 ) )
+        response = self.com.read( Protocol._MSG_LEN )
+
+
+    def constant_current( self, current ) -> None:
+        self._clear_buffer()
+        self.com.write( Protocol.gen_action_msg_float( self.address, Protocol.OP_ICTRL, 0, current ) )
+        response = self.com.read( Protocol._MSG_LEN )
+
+    def modulation( self, state, single_shot = False, periodic = False ) -> None:
+        self._clear_buffer()
+
+        if not state:
+            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, Protocol.MOD_RUN, 0 ) )
+        else:
+            if single_shot:
+                   self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, Protocol.MOD_SINGLE_SHOT, 1 ) )
+            else:
+                if periodic:
+                    self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, Protocol.MOD_PERIODC, 1 ) )
+                else:
+                    self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, Protocol.MOD_RUN, 1 ) )
+
+        response = self.com.read( Protocol._MSG_LEN )
+
+    def generate_sine( self, amplitude, offset, frequency, phase = 0, sample_period = 1000 ):
+        self.write_float( Sylphium.Parameters.MOD_PARAM0, amplitude )
+        self.write_float( Sylphium.Parameters.MOD_PARAM1, offset )
+        self.write_float( Sylphium.Parameters.MOD_PARAM2, frequency )
+        self.write_float( Sylphium.Parameters.MOD_PARAM3, phase )
+        self.write( Sylphium.Parameters.MOD_SAMPLERATE, sample_period )
+        self.write( Sylphium.Parameters.MOD_LENGTH, 1000 )  
+        self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, Sylphium.Options.MOD_FILL, Sylphium.Options.MOD_SHAPE_SINE ) )
+    
+    def generate_pulse( self, amplitude, offset, duty_cycle, sample_period = 1000 ):
+        self.write_float( Sylphium.Parameters.MOD_PARAM0, amplitude )
+        self.write_float( Sylphium.Parameters.MOD_PARAM1, offset )
+        self.write_float( Sylphium.Parameters.MOD_PARAM2, duty_cycle )
+        self.write_float( Sylphium.Parameters.MOD_PARAM3, 0 )
+        self.write( Sylphium.Parameters.MOD_SAMPLERATE, sample_period )
+        self.write( Sylphium.Parameters.MOD_LENGTH, 1000 )
+        self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, Sylphium.Options.MOD_FILL, Sylphium.Options.MOD_SHAPE_PULSE ) )
+    
+        
