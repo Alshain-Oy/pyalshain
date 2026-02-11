@@ -3,7 +3,7 @@
 import struct
 from typing import Tuple
 
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 
 BAUDRATE = 460800
 
@@ -349,13 +349,16 @@ class Pica( Device ):
         V_HIGH =                 (4, float)
         V_DIFF =                 (5, float)
 
+        LOWPASS_FREQ =           (6, float)
 
-        DAC_VOLTAGE =            (10, float)
+        OFFSET_VOLTAGE =         (10, float)
         STATUS =                 (13, int)
 
         PULSE_AMPLITUDE =        (20, int)
         MEASUREMENT_RANGE =      (21, int)
         PULSE_BIAS =             (22, int)
+
+        PULSE_NRZ =              (23, int)
 
         ANALOG_OUT_MODE =        (30, int)
         ANALOG_OUT_MIN =         (31, float)
@@ -1325,3 +1328,15 @@ class Sylphium( Device ):
         self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, Sylphium.Options.MOD_FILL, Sylphium.Options.MOD_SHAPE_PULSE ) )
     
         
+
+# Signal multiplexer
+class SignalMultiplexer( Device ):
+    class Parameters:
+        VBUS =          (1, float)
+        CHANNEL =       (2, int)
+
+        FIRMWARE_VER =  (60, int)
+        UPTIME =        (61, int)
+
+    class NVM:
+        DEVICE_ADDRESS =   (4)
