@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 import struct
+import serial
 from typing import Tuple
 
-__version__ = '0.1.2'
+__version__ = '0.1.3'
 
 BAUDRATE = 460800
 
@@ -87,11 +88,7 @@ class Protocol:
         return struct.pack( ">BBIi", addr, Protocol.OP_READ, key, 0 )
 
     @staticmethod
-    def gen_action_msg( addr: int, action: int, key: int, value: int ) -> bytes:
-        return struct.pack( ">BBIi", addr, action, key, value )
-
-    @staticmethod
-    def gen_action_msg_float( addr: int, action: int, key: int, value: int ) -> bytes:
+    def gen_action_msg_float( addr: int, action: int, key: int, value: float ) -> bytes:
         return struct.pack( ">BBIf", addr, action, key, value )
 
     @staticmethod
@@ -103,7 +100,7 @@ class Protocol:
         return struct.pack( ">BBII", addr, action, key, value )
 
     @staticmethod
-    def gen_action_msg_mem_float( addr: int, action: int, key: int, value: int ) -> bytes:
+    def gen_action_msg_mem_float( addr: int, action: int, key: int, value: float ) -> bytes:
         return struct.pack( ">BBIf", addr, action, key, value )
 
     # Peregrine2
@@ -128,32 +125,32 @@ class Protocol:
 
     @staticmethod
     def decode_error( msg: bytes ) -> Tuple[int, int]:
-        (addr, op, error, extra) = struct.unpack( ">BBIi", msg )
+        (_, _, error, extra) = struct.unpack( ">BBIi", msg )
         return error, extra
 
     @staticmethod
     def decode_read( msg: bytes ) -> Tuple[int, int]:
-        (addr, op, key, value) = struct.unpack( ">BBIi", msg )
+        (_, _, key, value) = struct.unpack( ">BBIi", msg )
         return key, value
 
     @staticmethod
     def decode_read_float( msg: bytes ) -> Tuple[int, float]:
-        (addr, op, key, value) = struct.unpack( ">BBIf", msg )
+        (_, _, key, value) = struct.unpack( ">BBIf", msg )
         return key, value
 
     @staticmethod
     def decode_action( msg: bytes ) -> Tuple[int, int]:
-        (addr, op, key, value) = struct.unpack( ">BBIi", msg )
+        (_, _, key, value) = struct.unpack( ">BBIi", msg )
         return key, value
 
     @staticmethod
     def decode_action_mem( msg: bytes ) -> Tuple[int, int]:
-        (addr, op, key, value) = struct.unpack( ">BBII", msg )
+        (_, _, key, value) = struct.unpack( ">BBII", msg )
         return key, value
 
     @staticmethod
     def decode_action_mem_float( msg: bytes ) -> Tuple[int, float]:
-        (addr, op, key, value) = struct.unpack( ">BBIf", msg )
+        (_, _, key, value) = struct.unpack( ">BBIf", msg )
         return key, value
 
     @staticmethod
@@ -178,33 +175,23 @@ class Protocol:
 
     @staticmethod
     def decode_status( msg ):
-        (addr, op, position, speed, flags) = struct.unpack( ">BBihH", msg )
+        (_, _, position, speed, flags) = struct.unpack( ">BBihH", msg )
         return position, speed*10, Protocol.decode_flags( flags )
 
     # Strix
     @staticmethod
     def decode_measure( msg: bytes ) -> Tuple[float, float]:
-        (addr, op, voltage, current) = struct.unpack( ">BBff", msg )
+        (_, _, voltage, current) = struct.unpack( ">BBff", msg )
         return voltage, current
 
 
 
-class MemoryMap:
-    def __init__( self, device: object, start_address: int ) -> None:
-        self.device = device
-        self.start_address = start_address
-    
-    def __getitem__(self, addr: int) -> float:
-        return self.device.read_float( self.start_address + addr )
-    
-    def __setitem__(self, addr: int, value: float) -> float:
-        return self.device.write_float( self.start_address + addr, value )
 
 
 
 # Base class for all device drivers
 class Device( object ):
-    def __init__( self, com: object, address: int ) -> None:
+    def __init__( self, com: serial.Serial, address: int ) -> None:
         self.com = com
         self.address = address
     
@@ -213,7 +200,7 @@ class Device( object ):
         if self.com.in_waiting > 0:
             self.com.read( self.com.in_waiting )
 
-    def write( self, key: int|Tuple, value: int ) -> None:
+    def write( self, key: int|Tuple, value: int|float ) -> None:
         self._clear_buffer()
 
         if isinstance(key, tuple):
@@ -266,9 +253,9 @@ class Device( object ):
             raise IndexError
         
         if isinstance(key, tuple):
-            if key[1] == int:
+            if key[1] != float:
                 key, value = Protocol.decode_read( response )
-            elif key[1] == float:
+            else:
                 key, value = Protocol.decode_read_float( response )
         else:
             key, value = Protocol.decode_read( response )
@@ -290,9 +277,9 @@ class Device( object ):
             raise IndexError
         
         if isinstance(key, tuple):
-            if key[1] == int:
+            if key[1] != float:
                 key, value = Protocol.decode_read( response )
-            elif key[1] == float:
+            else:
                 key, value = Protocol.decode_read_float( response )
         else:
             key, value = Protocol.decode_read_float( response )
@@ -336,6 +323,16 @@ class Device( object ):
         self._clear_buffer()    
         self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_DFU, 0, 0 ) )
 
+class MemoryMap:
+    def __init__( self, device: Device, start_address: int ) -> None:
+        self.device = device
+        self.start_address = start_address
+    
+    def __getitem__(self, addr: int) -> float:
+        return self.device.read_float( self.start_address + addr )
+    
+    def __setitem__(self, addr: int, value: float) -> None:
+        self.device.write_float( self.start_address + addr, value )
 
 # Pica readout
 class Pica( Device ):
@@ -350,6 +347,8 @@ class Pica( Device ):
         V_DIFF =                 (5, float)
 
         LOWPASS_FREQ =           (6, float)
+
+        SENSOR_TEMPERATURE =     (7, float)
 
         OFFSET_VOLTAGE =         (10, float)
         STATUS =                 (13, int)
@@ -373,6 +372,12 @@ class Pica( Device ):
         CALIB_COEFF_2 =           (102, float)
         CALIB_COEFF_3 =           (103, float)
     
+        TEMPCO_COEFF_0 =          (110, float)
+        TEMPCO_COEFF_1 =          (111, float)
+        TEMPCO_COEFF_2 =          (112, float)
+        TEMPCO_COEFF_3 =          (113, float)
+
+
     class Options:
         MODE_VOUT =                     (0)
         MODE_CURRENT_LOOP =             (1)
@@ -395,11 +400,18 @@ class Pica( Device ):
         MEASUREMENT_RANGE =       (32)
         SERIAL_NUMBER =           (36)
         PULSE_BIAS =              (40)
+        LOWPASS_FREQ =            (44)
 
         CALIB_COEFF_0 =           (64)
         CALIB_COEFF_1 =           (68)
         CALIB_COEFF_2 =           (72)
         CALIB_COEFF_3  =          (76)
+
+        TEMPCO_COEFF_0 =          (80)
+        TEMPCO_COEFF_1 =          (84)
+        TEMPCO_COEFF_2 =          (88)
+        TEMPCO_COEFF_3 =          (92)
+
     
     def query_i2c( self, address: int ):
         self._clear_buffer()
@@ -564,13 +576,13 @@ class Peregrine2( Device ):
         response = self.com.read( Protocol._MSG_LEN )
         return Protocol.decode_status( response ) 
 
-    def move_a( self, pos, speed, accel ):
+    def move_a( self, pos: int, speed: int, accel: int ):
         self._clear_buffer()
         self.com.write( Protocol.gen_move_a_msg( self.address, int(pos), int(speed/32), int(accel/32)  ) )
         response = self.com.read( Protocol._MSG_LEN )
         return Protocol.decode_status( response ) 
 
-    def move_b( self, pos, speed, accel ):
+    def move_b( self, pos: int, speed: int, accel: int ):
         self._clear_buffer()
         self.com.write( Protocol.gen_move_b_msg( self.address, int(pos), int(speed/32), int(accel/32)  ) )
         response = self.com.read( Protocol._MSG_LEN )
@@ -905,7 +917,7 @@ class Strix( Device ):
 
     def __init__(self, com, address, classic: bool = False ):
         super().__init__(com, address)
-        self.data = MemoryMap( self, Strix.Parameters.DATA_START )
+        self.data = MemoryMap( self, Strix.Parameters.DATA_START[0] )
         self.is_classic = classic
     
 
@@ -967,7 +979,7 @@ class Strix( Device ):
         
         self.com.write( Protocol.gen_action_msg_float( self.address, Protocol.OP_MEASURE_VOLTAGE, 0, 0 ) )
         response = self.com.read( Protocol._MSG_LEN )
-        voltage, current = Protocol.decode_measure( response )
+        voltage, _ = Protocol.decode_measure( response )
         return voltage
     
     def measure_current( self ) -> float:
@@ -975,7 +987,7 @@ class Strix( Device ):
         
         self.com.write( Protocol.gen_action_msg_float( self.address, Protocol.OP_MEASURE_CURRENT, 0, 0 ) )
         response = self.com.read( Protocol._MSG_LEN )
-        voltage, current = Protocol.decode_measure( response )
+        _, current = Protocol.decode_measure( response )
 
         if self.is_classic:
             current = -current
@@ -1039,7 +1051,7 @@ class Strix( Device ):
         
         self.com.write( Protocol.gen_action_msg_float( self.address, Protocol.OP_MEASURE_EXT, 0, 0 ) )
         response = self.com.read( Protocol._MSG_LEN )
-        voltage, current = Protocol.decode_measure( response )
+        voltage, _ = Protocol.decode_measure( response )
         return voltage
 
     def async_set_drive_voltage( self, voltage: float ) -> int:
@@ -1050,7 +1062,7 @@ class Strix( Device ):
 
         self.com.write( Protocol.gen_action_msg_float( self.address, Protocol.OP_ASYNC_DRIVE_VOLTAGE, 0, voltage ) )
         response = self.com.read( Protocol._MSG_LEN )
-        key, value = Protocol.decode_action( response )
+        _, value = Protocol.decode_action( response )
         return value 
 
     def async_set_drive_current( self, current: float ) -> int:
@@ -1061,7 +1073,7 @@ class Strix( Device ):
 
         self.com.write( Protocol.gen_action_msg_float( self.address, Protocol.OP_ASYNC_DRIVE_CURRENT, 0, current ) )
         response = self.com.read( Protocol._MSG_LEN )
-        key, value = Protocol.decode_action( response )
+        _, value = Protocol.decode_action( response )
         return value 
 
 
@@ -1075,28 +1087,28 @@ class Strix( Device ):
         
         self.com.write( Protocol.gen_action_msg_float( self.address, Protocol.OP_ASYNC_MEASURE_VOLTAGE, 0, 0 ) )
         response = self.com.read( Protocol._MSG_LEN )
-        voltage, current = Protocol.decode_measure( response )
+        _, _ = Protocol.decode_measure( response )
         
     def async_measure_current( self ) -> None:
         self._clear_buffer()
         
         self.com.write( Protocol.gen_action_msg_float( self.address, Protocol.OP_ASYNC_MEASURE_CURRENT, 0, 0 ) )
         response = self.com.read( Protocol._MSG_LEN )
-        voltage, current = Protocol.decode_measure( response )
+        _, _ = Protocol.decode_measure( response )
 
     def async_measure_ext( self ) -> None:
         self._clear_buffer()
         
         self.com.write( Protocol.gen_action_msg_float( self.address, Protocol.OP_ASYNC_MEASURE_EXT, 0, 0 ) )
         response = self.com.read( Protocol._MSG_LEN )
-        voltage, current = Protocol.decode_measure( response )
+        _, _ = Protocol.decode_measure( response )
 
     def async_start_sweep( self, read_channel: int, write_channel: int  ) -> None:
         self._clear_buffer()
         
         self.com.write( Protocol.gen_action_msg_float( self.address, Protocol.OP_ASYNC_START_SWEEP, read_channel, write_channel ) )
         response = self.com.read( Protocol._MSG_LEN )
-        voltage, current = Protocol.decode_measure( response )
+        _, _ = Protocol.decode_measure( response )
 
     def enable_output( self, output_state: bool ) -> None:
         self._clear_buffer()
@@ -1107,7 +1119,7 @@ class Strix( Device ):
             self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_SET_OUTPUT, 0, 0 ) )
             
         response = self.com.read( Protocol._MSG_LEN )
-        key, value = Protocol.decode_action( response )
+        _, _ = Protocol.decode_action( response )
     
     def set_low_current_mode( self, mode: bool ) -> None:
         self._clear_buffer()
@@ -1118,7 +1130,7 @@ class Strix( Device ):
             self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_SET_LOW_CURRENT_MODE, 0, 0 ) )
             
         response = self.com.read( Protocol._MSG_LEN )
-        key, value = Protocol.decode_action( response )
+        _, _ = Protocol.decode_action( response )
 
 
 
@@ -1271,43 +1283,43 @@ class Sylphium( Device ):
         self._clear_buffer()
         
         if state:
-            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_ENABLE, Protocol.ENABLE_OUTPUT, 1 ) )
+            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_ENABLE, self.Options.ENABLE_OUTPUT, 1 ) )
         else:
-            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_ENABLE, Protocol.ENABLE_OUTPUT, 0 ) )
+            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_ENABLE, self.Options.ENABLE_OUTPUT, 0 ) )
             
-        response = self.com.read( Protocol._MSG_LEN )
+        _ = self.com.read( Protocol._MSG_LEN )
 
 
     def enable_main_power( self, state ) -> None:
         self._clear_buffer()
         
         if state:
-            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_ENABLE, Protocol.ENABLE_POWER, 1 ) )
+            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_ENABLE, self.Options.ENABLE_POWER, 1 ) )
         else:
-            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_ENABLE, Protocol.ENABLE_POWER, 0 ) )
-        response = self.com.read( Protocol._MSG_LEN )
+            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_ENABLE, self.Options.ENABLE_POWER, 0 ) )
+        _ = self.com.read( Protocol._MSG_LEN )
 
 
     def constant_current( self, current ) -> None:
         self._clear_buffer()
         self.com.write( Protocol.gen_action_msg_float( self.address, Protocol.OP_ICTRL, 0, current ) )
-        response = self.com.read( Protocol._MSG_LEN )
+        _ = self.com.read( Protocol._MSG_LEN )
 
     def modulation( self, state, single_shot = False, periodic = False ) -> None:
         self._clear_buffer()
 
         if not state:
-            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, Protocol.MOD_RUN, 0 ) )
+            self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, self.Options.MOD_RUN, 0 ) )
         else:
             if single_shot:
-                   self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, Protocol.MOD_SINGLE_SHOT, 1 ) )
+                   self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, self.Options.MOD_SINGLE_SHOT, 1 ) )
             else:
                 if periodic:
-                    self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, Protocol.MOD_PERIODC, 1 ) )
+                    self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, self.Options.MOD_PERIODC, 1 ) )
                 else:
-                    self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, Protocol.MOD_RUN, 1 ) )
+                    self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_MODULATION, self.Options.MOD_RUN, 1 ) )
 
-        response = self.com.read( Protocol._MSG_LEN )
+        _ = self.com.read( Protocol._MSG_LEN )
 
     def generate_sine( self, amplitude, offset, frequency, phase = 0, sample_period = 1000 ):
         self.write_float( Sylphium.Parameters.MOD_PARAM0, amplitude )
