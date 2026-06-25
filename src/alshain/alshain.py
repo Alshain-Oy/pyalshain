@@ -421,122 +421,134 @@ class Pica( Device ):
         _, value = Protocol.decode_read( response )
         return value
 
+    def read_temperature( self, key: int ) -> float:
+        self._clear_buffer()
+        
+        self.com.write( Protocol.gen_action_msg( self.address, Protocol.OP_I2C_TEMP, int( key ), 0 ) )
+        response = self.com.read( Protocol._MSG_LEN )
+        
+        _, op = Protocol.decode_header( response )
+        if op == Protocol.OP_ERROR:
+            raise IndexError
+        
+        key, value = Protocol.decode_read( response )
+        return (value / 32) * 0.125
 
 # Peregrine2 motion controller
 class Peregrine2( Device ):
     class Parameters:
-        ENCODER_A =       (0)
-        ENCODER_B =       (1)
-        POSITION_A =      (2)
-        POSITION_B =      (3)
+        ENCODER_A =       (0, int)
+        ENCODER_B =       (1, int)
+        POSITION_A =      (2, float)
+        POSITION_B =      (3, float)
 
-        TARGET_A =        (4)
-        TARGET_B =        (5)
+        TARGET_A =        (4, float)
+        TARGET_B =        (5, float)
 
-        STEPRATE_A =      (6)
-        STEPRATE_B =      (7)
+        STEPRATE_A =      (6, float)
+        STEPRATE_B =      (7, float)
 
-        ENABLED_A =       (8)
-        ENABLED_B =       (9)
+        ENABLED_A =       (8, int)
+        ENABLED_B =       (9, int)
         
 
-        PATH_A_T =        (10)
-        PATH_A_T0 =       (11)
-        PATH_A_T1 =       (12)
-        PATH_A_T2 =       (13)
+        PATH_A_T =        (10, float)
+        PATH_A_T0 =       (11, float)
+        PATH_A_T1 =       (12, float)
+        PATH_A_T2 =       (13, float)
 
-        PATH_B_T =        (14)
-        PATH_B_T0 =       (15)
-        PATH_B_T1 =       (16)
-        PATH_B_T2 =       (17)
+        PATH_B_T =        (14, float)
+        PATH_B_T0 =       (15, float)
+        PATH_B_T1 =       (16, float)
+        PATH_B_T2 =       (17, float)
 
-        PATH_A_X0 =       (18)
-        PATH_A_X1 =       (19)
-        PATH_B_X0 =       (20)
-        PATH_B_X1 =       (21)
+        PATH_A_X0 =       (18, float)
+        PATH_A_X1 =       (19, float)
+        PATH_B_X0 =       (20, float)
+        PATH_B_X1 =       (21, float)
 
-        LIMIT_A_MINUS =  (30)
-        LIMIT_A_PLUS =   (31)
-        LIMIT_B_MINUS =  (32)
-        LIMIT_B_PLUS =   (33)
-
-
-        LIMIT_A_MINUS_MODE = (34)
-        LIMIT_A_PLUS_MODE = (35)
-        LIMIT_B_MINUS_MODE = (36)
-        LIMIT_B_PLUS_MODE = (37)
+        LIMIT_A_MINUS =  (30, int)
+        LIMIT_A_PLUS =   (31, int)
+        LIMIT_B_MINUS =  (32, int)
+        LIMIT_B_PLUS =   (33, int)
 
 
-        DRIVE_CFG_A =   (40)
-        DRIVE_CFG_B =   (41)
+        LIMIT_A_MINUS_MODE = (34, int)
+        LIMIT_A_PLUS_MODE = (35, int)
+        LIMIT_B_MINUS_MODE = (36, int)
+        LIMIT_B_PLUS_MODE = (37, int)
 
-        MOTOR_DIR_A =   (42)
-        MOTOR_DIR_B =   (43)
+
+        DRIVE_CFG_A =   (40, int)
+        DRIVE_CFG_B =   (41, int)
+
+        MOTOR_DIR_A =   (42, int)
+        MOTOR_DIR_B =   (43, int)
 
 
-        ERROR_GAIN_A =  (50)
-        LQR_K0_A =      (51)
-        LQR_K1_A =      (52)
-        DEADZONE_A =    (53)
-        SLEWRATE_A =    (54)
+        ERROR_GAIN_A =  (50, float)
+        LQR_K0_A =      (51, float)
+        LQR_K1_A =      (52, float)
+        DEADZONE_A =    (53, float)
+        SLEWRATE_A =    (54, float)
 
-        ERROR_GAIN_B =  (55)
-        LQR_K0_B =      (56)
-        LQR_K1_B =      (57)
-        DEADZONE_B =    (58)
-        SLEWRATE_B =    (59)
+        ERROR_GAIN_B =  (55, float)
+        LQR_K0_B =      (56, float)
+        LQR_K1_B =      (57, float)
+        DEADZONE_B =    (58, float)
+        SLEWRATE_B =    (59, float)
 
-        EMG_STOP =       (70)
+        EMG_STOP =       (70, int)
         # Peregrine sets EMG_STOP_LATCH to 1 when emergency stop activated. User must clear it manually.
         # Clears also in power loss
-        EMG_STOP_LATCH = (71)
+        EMG_STOP_LATCH = (71, int)
 
 
-        IMON0 =         (100)
-        IMON1 =         (101)
-        A0 =            (102)
-        A1 =            (103)
-        A2 =            (104)
-        VMON =          (105)
+        IMON0 =         (100, float)
+        IMON1 =         (101, float)
+        A0 =            (102, float)
+        A1 =            (103, float)
+        A2 =            (104, float)
+        VMON =          (105, float)
 
-        GPIO0 =         (106)
-        GPIO1 =         (107)
+        GPIO0 =         (106, int)
+        GPIO1 =         (107, int)
 
-        IDAC1 =         (110)
-        IDAC2 =         (111)
+        IDAC1 =         (110, float)
+        IDAC2 =         (111, float)
 
-        MODULE_A =      (90)
-        MODULE_B =      (91)
+        MODULE_A =      (90, int)
+        MODULE_B =      (91, int)
 
 
-        HBRIDGE_PWM_A =   (92)
-        HBRIDGE_PWM_B =   (93)
+        HBRIDGE_PWM_A =   (92, int)
+        HBRIDGE_PWM_B =   (93, int)
 
-        FDIR_MAX_ERROR_A = (120)
-        FDIR_STATE_A =     (121)
+        FDIR_MAX_ERROR_A = (120, float)
+        FDIR_STATE_A =     (121, int)
         
-        FDIR_MAX_ERROR_B = (122)
-        FDIR_STATE_B =     (123)
+        FDIR_MAX_ERROR_B = (122, float)
+        FDIR_STATE_B =     (123, int)
 
-        ANALOG_THRESHOLD_0 =    (130)
-        ANALOG_TH_0_HYST =      (131)
-        ANALOG_TH_0_POS_A =     (132)
-        ANALOG_TH_0_POS_B =     (133)
-        ANALOG_TH_0_STATE =     (134)
+        ANALOG_THRESHOLD_0 =    (130, float)
+        ANALOG_TH_0_HYST =      (131, float)
+        ANALOG_TH_0_POS_A =     (132, float)
+        ANALOG_TH_0_POS_B =     (133, float)
+        ANALOG_TH_0_STATE =     (134, int)
         
-        ANALOG_THRESHOLD_1 =    (135)
-        ANALOG_TH_1_HYST =      (136)
-        ANALOG_TH_1_POS_A =     (137)
-        ANALOG_TH_1_POS_B =     (138)
-        ANALOG_TH_1_STATE =     (139)
+        ANALOG_THRESHOLD_1 =    (135, float)
+        ANALOG_TH_1_HYST =      (136, float)
+        ANALOG_TH_1_POS_A =     (137, float)
+        ANALOG_TH_1_POS_B =     (138, float)
+        ANALOG_TH_1_STATE =     (139, int)
 
-        SERVO_LOOP_ENABLED_A =    (140)
-        SERVO_LOOP_ENABLED_B =    (141)
+        SERVO_LOOP_ENABLED_A =    (140, int)
+        SERVO_LOOP_ENABLED_B =    (141, int)
 
 
-        USER_HOMED_A =       (2000)
-        USER_HOMED_B =       (2001)
-        USER_HOMED_STAGE =   (2002)
+        USER_HOMED_A =       (2000, int)
+        USER_HOMED_B =       (2001, int)
+        USER_HOMED_STAGE =   (2002, int)
 
     class Options:
         MODULE_UNKNOWN =      (0)
